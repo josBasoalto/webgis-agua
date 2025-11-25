@@ -1,90 +1,247 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mapa de Reportes</title>
+<meta charset="utf-8">
+<title>WebGIS – Disponibilidad de Agua Agrícola</title>
 
-    <!-- Leaflet -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
-    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<!-- Leaflet CSS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
 
-    <!-- PapaParse -->
-    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<style>
+    body, html {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        font-family: Arial, sans-serif;
+    }
 
-    <style>
-        #map {
-            height: 100vh;
-            width: 100%;
-        }
-        img {
-            margin-top: 8px;
-            border-radius: 6px;
-        }
-    </style>
+    #map {
+        height: 100vh;
+        width: 100%;
+    }
+
+    /* Panel lateral */
+    #sidebar {
+        position: absolute;
+        top: 0px;
+        right: 0px;
+        width: 320px;
+        background: rgb(114, 179, 196);
+        padding: 18px;
+        border-radius: 10px;
+        box-shadow: 0px 0px 12px rgba(0,0,0,0.3);
+        z-index: 1000;
+        max-height: 100vh;
+        overflow-y: auto;
+    }
+
+    #sidebar h2 {
+        background: #0078d4;
+        color: white;
+        padding: 6px;
+        margin: 5px 0;
+        border-radius: 4px;
+        font-size:16px;
+        
+    }
+
+    #sidebar h3 {
+        font-size: 15px;
+        margin-top: 20px;
+        border-bottom:2px solid white;
+        padding-bottom: 4px;
+    }
+
+    p {
+        font-size: 14px;
+        margin-bottom: 6px;
+    }
+
+    ul {
+        margin-top: 4px;
+        padding-left: 20px;
+        font-size: 14px;
+    }
+
+
+    .preview-item {
+        background: #f7f7f7;
+        padding: 6px;
+        margin: 5px 0;
+        border-radius: 4px;
+        font-size: 13px;
+    }
+
+    .boton-principal {
+        width: 100%;
+        padding: 12px;
+        background: #0078d4;
+        color: white;
+        border: none;
+        margin-top: 15px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: bold;
+    }
+
+    .boton-principal:hover {
+        background: #005fa3;
+    }
+</style>
 </head>
 
 <body>
 
-    <div id="map"></div>
+<div id="sidebar">
 
-    <script>
-    // ================================
-    //   INICIALIZAR MAPA
-    // ================================
-    var map = L.map('map').setView([-37.47, -72.32], 12);
+    <h2>Instrucciones para el Formulario</h2>
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19
-    }).addTo(map);
+    <p>Antes de enviar tu reporte, sigue estos pasos:</p>
 
-    // ================================
-    //   CARGAR CSV
-    // ================================
-    Papa.parse("data/reporte.csv", {
+    <ul>
+        <li><strong>Mueve el marcador</strong> al lugar exacto de tu predio o área de riego.</li>
+        <br>
+        <li>Revisa la <strong>vista previa del formulario</strong> para saber qué información se pedirá.</li>
+        <br>
+        <li>Cuando estés listo, presiona el botón para abrir el <strong>FORMULARIO oficial. </strong>
+    </ul>
+
+    <p style="font: size 15px; color:black ">
+    Importante: Al finalizar el formulario en KoboToolbox  <strong>debes precionar la opcion SUBMIT</strong> 
+    La opción “Save Draft” NO envía el reporte.
+    </p>
+
+    <h2>Vista previa del Formulario</h2>
+ 
+    <div class="preview-item">• Origen del agua</div>
+    <div class="preview-item">• Tipo de conducción</div>
+    <div class="preview-item">• Nombre del canal / río / pozo</div>
+    <div class="preview-item">• Superficie del predio (ha)</div>
+    <div class="preview-item">• Cultivo principal</div>
+    <div class="preview-item">• Grado de afectación</div>
+    <div class="preview-item">• Observaciones</div>
+    <div class="preview-item">• Foto (opcional)</div>
+    <div class="preview-item">• Ubicación GPS</div>
+
+    <button class="boton-principal" onclick="enviarKobo()">
+        ABRIR FORMULARIO OFICIAL
+    </button>
+
+</div>
+
+
+<div id="map"></div>
+
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<script>
+
+// Inicializar mapa
+
+var map = L.map('map').setView([-33.45, -70.66], 13);
+
+// Capa base
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '© OpenStreetMap'
+}).addTo(map);
+
+// Marcador del usuario
+var userMarker;
+
+
+// Ubicación del usuario
+
+map.locate({ setView: true, maxZoom: 16 });
+
+map.on('locationfound', function(e) {
+    if (userMarker) map.removeLayer(userMarker);
+
+    userMarker = L.marker(e.latlng, { draggable: true }).addTo(map);
+    userMarker.bindPopup("Mueve este marcador para ubicar tu campo").openPopup();
+});
+
+map.on('locationerror', function() {
+    alert("No se pudo obtener tu ubicación. Mueve el marcador manualmente.");
+
+    userMarker = L.marker([-33.45, -70.66], { draggable: true }).addTo(map);
+    userMarker.bindPopup("Mueve este marcador para ubicar tu campo").openPopup();
+});
+
+
+// Enviar a KoboToolbox
+
+
+function enviarKobo() {
+    var koboURL = "https://ee.kobotoolbox.org/x/QmnUgP90";
+
+    alert("Serás redirigido al formulario oficial para completar tu reporte.");
+
+    window.open(koboURL, "_blank");
+}
+
+
+
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+
+<!-- lectura y cargado del csv -->
+
+<script>
+function cargarCSV() {
+    Papa.parse("data/prueba_2.csv", {
         download: true,
         header: true,
+
         complete: function(results) {
-            console.log("CSV cargado:", results.data);
-            agregarPuntos(results.data);
-        }
-    });
+            let datos = results.data;
 
-    // ================================
-    //   AGREGAR PUNTOS AL MAPA
-    // ================================
-    function agregarPuntos(data) {
+            datos.forEach(function(row) {
 
-        data.forEach(row => {
+                // Validar que existan coordenadas
+                if (!row["_Ubicación GPS del punto reportado_latitude"] ||
+                    !row["_Ubicación GPS del punto reportado_longitude"]) return;
 
-            let lat = parseFloat(row["_Ubicación GPS del punto reportado_latitude"]);
-            let lon = parseFloat(row["_Ubicación GPS del punto reportado_longitude"]);
+                let lat = parseFloat(row["_Ubicación GPS del punto reportado_latitude"]);
+                let lng = parseFloat(row["_Ubicación GPS del punto reportado_longitude"]);
 
-            if (!isNaN(lat) && !isNaN(lon)) {
-
-                let marker = L.marker([lat, lon]).addTo(map);
-
-                // ─────────────── POPUP ───────────────
-                let popupContent = `
-                    <b>Origen del agua:</b> ${row["Origen del agua"] || "—"}<br>
-                    <b>Nombre:</b> ${row["Nombre del río, canal, tranque o pozo"] || "—"}<br>
-                    <b>Grado de afectación:</b> ${row["Grado de afectación"] || row["Grado de afectaciÃ³n"] || "—"}<br>
+                // === POPUP SIN IMÁGENES ===
+                let popup = `
+                    <b>Origen del agua:</b> ${row["Origen del agua"]}<br>
+                    <b>Conducción:</b> ${row["Tipo de conducción"]}<br>
+                    <b>Nombre:</b> ${row["Nombre del río, canal, tranque o pozo"]}<br>
+                    <b>Superficie:</b> ${row["Superficie del predio (ha)"]} ha<br>
+                    <b>Cultivo:</b> ${row["Cultivo principal"]}<br>
+                    <b>Afectación:</b> ${row["Grado de afectación"]}<br>
                     <b>Observaciones:</b> ${row["Observaciones adicionales"] || "—"}<br>
+                    <b>Fecha:</b> ${row["_submission_time"]}<br>
                 `;
 
-                // ─────────────── IMAGEN ───────────────
-                if (row["Fotografía del punto (opcional)_URL"]) {
-                    popupContent += `
-                        <br><img src="${row["Fotografía del punto (opcional)_URL"]}" width="250">
-                    `;
-                }
+                // Dibujar punto como círculo rojo
+                L.circleMarker([lat, lng], {
+                    radius: 8,
+                    color: "red",
+                    fillColor: "red",
+                    fillOpacity: 0.8,
+                    weight: 2
+                })
+                .addTo(map)
+                .bindPopup(popup);
 
-                marker.bindPopup(popupContent);
-            }
-        });
-    }
+            });
 
-    </script>
+        }
+    });
+}
+
+// Ejecutar automáticamente
+cargarCSV();
+</script>
+
 
 </body>
 </html>
