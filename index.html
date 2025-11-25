@@ -207,8 +207,16 @@ function cargarCSV() {
                 let lat = parseFloat(row["_Ubicación GPS del punto reportado_latitude"]);
                 let lng = parseFloat(row["_Ubicación GPS del punto reportado_longitude"]);
 
-                let foto = row["Fotografía del punto (opcional)_URL"]
-                            ? `<img src="${row["Fotografía del punto (opcional)_URL"]}" width="200"><br>`
+                let fotoURL = null;
+                
+                // Construir la URL REAL de la imagen combinando base + filename
+                if (row["Fotografía del punto (opcional)_URL"] && row["Fotografía del punto (opcional)"]) {
+                    fotoURL = row["Fotografía del punto (opcional)_URL"] 
+                                + row["Fotografía del punto (opcional)"];
+                }
+                
+                let foto = fotoURL 
+                            ? `<img src="${fotoURL}" width="200"><br>` 
                             : "Sin foto<br>";
 
                 let popup = `
@@ -246,6 +254,7 @@ cargarCSV();
 
 </body>
 </html>
+
 
 
 
