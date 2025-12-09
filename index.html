@@ -7,6 +7,9 @@
 <!-- Leaflet CSS -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
 
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
 <style>
     body, html {
         margin: 0;
@@ -42,7 +45,6 @@
         margin: 5px 0;
         border-radius: 4px;
         font-size:16px;
-        
     }
 
     #sidebar h3 {
@@ -62,7 +64,6 @@
         padding-left: 20px;
         font-size: 14px;
     }
-
 
     .preview-item {
         background: #f7f7f7;
@@ -88,6 +89,14 @@
     .boton-principal:hover {
         background: #005fa3;
     }
+
+    canvas {
+        width: 100% !important;
+        height: 180px !important;
+        margin-bottom: 20px;
+        background: white;
+        border-radius: 6px;
+    }
 </style>
 </head>
 
@@ -104,12 +113,12 @@
         <br>
         <li>Revisa la <strong>vista previa del formulario</strong> para saber qué información se pedirá.</li>
         <br>
-        <li>Cuando estés listo, presiona el botón para abrir el <strong>FORMULARIO oficial. </strong>
+        <li>Cuando estés listo, presiona el botón para abrir el <strong>FORMULARIO oficial.</strong></li>
     </ul>
 
     <p style="font: size 15px; color:black ">
-    Importante: Al finalizar el formulario en KoboToolbox  <strong>debes precionar la opcion SUBMIT</strong> 
-    La opción “Save Draft” NO envía el reporte.
+    Importante: Al finalizar el formulario en KoboToolbox <strong>debes presionar la opción SUBMIT</strong>.  
+    “Save Draft” NO envía el reporte.
     </p>
 
     <h2>Vista previa del Formulario</h2>
@@ -128,8 +137,17 @@
         ABRIR FORMULARIO OFICIAL
     </button>
 
-</div>
+    <!-- 📊 NUEVOS GRÁFICOS -->
+    <h3>Distribución del grado de afectación</h3>
+    <canvas id="afectacionChart"></canvas>
 
+    <h3>Distribución del origen del agua</h3>
+    <canvas id="origenChart"></canvas>
+
+    <h3>Distribución de superficies de predios (ha)</h3>
+    <canvas id="superficieChart"></canvas>
+
+</div>
 
 <div id="map"></div>
 
@@ -137,9 +155,7 @@
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
 <script>
-
 // Inicializar mapa
-
 var map = L.map('map').setView([-33.45, -70.66], 13);
 
 // Capa base
@@ -151,9 +167,7 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
 // Marcador del usuario
 var userMarker;
 
-
 // Ubicación del usuario
-
 map.locate({ setView: true, maxZoom: 16 });
 
 map.on('locationfound', function(e) {
@@ -170,28 +184,27 @@ map.on('locationerror', function() {
     userMarker.bindPopup("Mueve este marcador para ubicar tu campo").openPopup();
 });
 
-
-// Enviar a KoboToolbox
-
-
+// KoboToolbox
 function enviarKobo() {
     var koboURL = "https://ee.kobotoolbox.org/x/QmnUgP90";
-
     alert("Serás redirigido al formulario oficial para completar tu reporte.");
-
     window.open(koboURL, "_blank");
 }
-
-
-
 </script>
 
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 
-
-<!-- lectura y cargado del csv -->
-
 <script>
+// === Colores según grado de afectación ===
+const coloresAfectacion = {
+    "leve": "#4CAF50",
+    "media": "#FFC107",
+    "severa": "#FF5722",
+    "pérdida total": "#9C27B0",
+    "perdida total": "#9C27B0"
+};
+
+// === Lectura de CSV ===
 function cargarCSV() {
     Papa.parse("data/prueba_2.csv", {
         download: true,
@@ -200,48 +213,108 @@ function cargarCSV() {
         complete: function(results) {
             let datos = results.data;
 
+            // Estadísticas
+            let afectCount = {};
+            let origenCount = {};
+            let superficiesLista = [];
+
             datos.forEach(function(row) {
 
-                // Validar que existan coordenadas
                 if (!row["_Ubicación GPS del punto reportado_latitude"] ||
                     !row["_Ubicación GPS del punto reportado_longitude"]) return;
 
                 let lat = parseFloat(row["_Ubicación GPS del punto reportado_latitude"]);
                 let lng = parseFloat(row["_Ubicación GPS del punto reportado_longitude"]);
+                let grado = row["Grado de afectación"]?.toLowerCase();
+                let origen = row["Origen del agua"];
+                let sup = parseFloat(row["Superficie del predio (ha)"]);
 
-                // === POPUP SIN IMÁGENES ===
-                let popup = `
-                    <b>Origen del agua:</b> ${row["Origen del agua"]}<br>
-                    <b>Conducción:</b> ${row["Tipo de conducción"]}<br>
-                    <b>Nombre:</b> ${row["Nombre del río, canal, tranque o pozo"]}<br>
-                    <b>Superficie:</b> ${row["Superficie del predio (ha)"]} ha<br>
-                    <b>Cultivo:</b> ${row["Cultivo principal"]}<br>
-                    <b>Afectación:</b> ${row["Grado de afectación"]}<br>
-                    <b>Observaciones:</b> ${row["Observaciones adicionales"] || "—"}<br>
-                    <b>Fecha:</b> ${row["_submission_time"]}<br>
-                `;
+                // Contadores
+                afectCount[grado] = (afectCount[grado] || 0) + 1;
+                origenCount[origen] = (origenCount[origen] || 0) + 1;
 
-                // Dibujar punto como círculo rojo
+                if (!isNaN(sup)) superficiesLista.push(sup);
+
+                // Marcador
                 L.circleMarker([lat, lng], {
                     radius: 8,
-                    color: "red",
-                    fillColor: "red",
-                    fillOpacity: 0.8,
+                    color: coloresAfectacion[grado] || "gray",
+                    fillColor: coloresAfectacion[grado] || "gray",
+                    fillOpacity: 0.9,
                     weight: 2
                 })
                 .addTo(map)
-                .bindPopup(popup);
+                .bindPopup(`
+                    <b>Origen del agua:</b> ${origen}<br>
+                    <b>Superficie:</b> ${sup} ha<br>
+                    <b>Afectación:</b> ${row["Grado de afectación"]}<br>
+                    <b>Fecha:</b> ${row["_submission_time"]}<br>
+                `);
+            });
 
+            // === Gráfico A ===
+            new Chart(document.getElementById("afectacionChart"), {
+                type: "bar",
+                data: {
+                    labels: Object.keys(afectCount),
+                    datasets: [{
+                        label: "Cantidad",
+                        data: Object.values(afectCount),
+                        backgroundColor: Object.keys(afectCount).map(g => coloresAfectacion[g] || "gray")
+                    }]
+                },
+                options: { plugins: { legend: { display: false } } }
+            });
+
+            // === Gráfico B ===
+            new Chart(document.getElementById("origenChart"), {
+                type: "bar",
+                data: {
+                    labels: Object.keys(origenCount),
+                    datasets: [{
+                        label: "Cantidad",
+                        data: Object.values(origenCount),
+                        backgroundColor: "steelblue"
+                    }]
+                },
+                options: { plugins: { legend: { display: false } } }
+            });
+
+            // === GRÁFICO C (nuevo): Histograma de superficies ===
+
+            // Creamos bins simples de tamaño 5 ha
+            let bins = {};
+            superficiesLista.forEach(v => {
+                let bin = Math.floor(v / 5) * 5;
+                let label = `${bin} - ${bin+5}`;
+                bins[label] = (bins[label] || 0) + 1;
+            });
+
+            new Chart(document.getElementById("superficieChart"), {
+                type: "bar",
+                data: {
+                    labels: Object.keys(bins),
+                    datasets: [{
+                        label: "Cantidad de predios",
+                        data: Object.values(bins),
+                        backgroundColor: "orange"
+                    }]
+                },
+                options: {
+                    plugins: { legend: { display: false } },
+                    scales: { x: { title: { display: true, text: "Rango de superficie (ha)" } } }
+                }
             });
 
         }
     });
 }
 
-// Ejecutar automáticamente
+// Ejecutar
 cargarCSV();
 </script>
 
-
 </body>
 </html>
+
+
